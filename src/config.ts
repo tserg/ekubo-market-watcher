@@ -19,10 +19,6 @@ export interface Config {
     ttlMs: number;
     maxCacheSize: number;
   };
-  server: {
-    port: number;
-    apiBaseUrl: string;
-  };
   network: {
     blocksPerMinute: number;
     maxLookbackMinutes: number;
@@ -48,10 +44,6 @@ export const config: Config = {
   cache: {
     ttlMs: parseInt(process.env.CACHE_TTL_MS || "60000"), // 60 seconds
     maxCacheSize: parseInt(process.env.MAX_POOL_CACHE_SIZE || "1000"),
-  },
-  server: {
-    port: parseInt(process.env.PORT || "8787"),
-    apiBaseUrl: process.env.API_BASE_URL || "http://localhost:8787",
   },
   network: {
     blocksPerMinute: parseInt(process.env.BLOCKS_PER_MINUTE || "60"), // Approximate
@@ -92,8 +84,6 @@ export function validateConfig(): void {
 // Log configuration (without sensitive data)
 export function logConfig(): void {
   console.log("=== Ekubo Market Watcher Configuration ===");
-  console.log(`Server port: ${config.server.port}`);
-  console.log(`API base URL: ${config.server.apiBaseUrl}`);
   console.log(`Cache TTL: ${config.cache.ttlMs}ms`);
   console.log(`Max cache size: ${config.cache.maxCacheSize}`);
   console.log(`Blocks per minute: ${config.network.blocksPerMinute}`);
