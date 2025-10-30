@@ -13,7 +13,6 @@
     "typecheck": "bunx tsc --noEmit"
   },
   "dependencies": {
-    "@ax-llm/ax": "latest",
     "@lucid-dreams/agent-kit": "latest",
     "@lucid-dreams/client": "^0.2.22",
     "dotenv": "^16.4.0",

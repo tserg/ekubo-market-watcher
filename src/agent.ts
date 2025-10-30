@@ -1,10 +1,8 @@
 import { z } from "zod";
 import {
   createAgentApp,
-  createAxLLMClient,
   AgentKitConfig,
 } from "@lucid-dreams/agent-kit";
-import { flow } from "@ax-llm/ax";
 import { Account, Contract, RpcProvider } from "starknet";
 import { config, validateConfig, logConfig } from "./config";
 import dotenv from "dotenv";
@@ -13,11 +11,10 @@ import dotenv from "dotenv";
 dotenv.config();
 
 /**
- * Enhanced Ekubo Market Watcher with AI-powered analysis capabilities.
- * Combines pool monitoring with AI insights and brainstorming features.
+ * Ekubo Market Watcher - Real-time pool monitoring on Starknet.
+ * Monitors PoolInitialized events from the Ekubo Core contract.
  *
  * Required environment variables:
- *   - OPENAI_API_KEY   (passed through to @ax-llm/ax)
  *   - PRIVATE_KEY      (used for x402 payments)
  */
 
@@ -25,7 +22,7 @@ dotenv.config();
 validateConfig();
 logConfig();
 
-// Enhanced agent configuration combining both approaches
+// Agent configuration for Ekubo pool monitoring
 const configOverrides: AgentKitConfig = {
   payments: {
     facilitatorUrl:
@@ -47,111 +44,23 @@ const configOverrides: AgentKitConfig = {
   },
   trust: {
     score: 100,
-    description: "Enhanced Ekubo pool monitoring with AI-powered market insights and analysis",
-    tags: ["defi", "ekubo", "starknet", "pools", "monitoring", "ai", "analysis"],
+    description: "Reliable Ekubo pool monitoring service with real-time event detection",
+    tags: ["defi", "ekubo", "starknet", "pools", "monitoring"],
   },
 };
 
-const axClient = createAxLLMClient({
-  logger: {
-    warn(message, error) {
-      if (error) {
-        console.warn(`[examples] ${message}`, error);
-      } else {
-        console.warn(`[examples] ${message}`);
-      }
-    },
-  },
-});
-
-if (!axClient.isConfigured()) {
-  console.warn(
-    "[examples] Ax LLM provider not configured — the flow will fall back to scripted output."
-  );
-}
-
-const brainstormingFlow = flow<{ topic: string }>()
-  .node(
-    "summarizer",
-    'topic:string -> summary:string "Two concise sentences describing the topic."'
-  )
-  .node(
-    "ideaGenerator",
-    'summary:string -> ideas:string[] "Three short follow-up ideas."'
-  )
-  .execute("summarizer", (state) => ({
-    topic: state.topic,
-  }))
-  .execute("ideaGenerator", (state) => ({
-    summary: state.summarizerResult.summary as string,
-  }))
-  .returns((state) => ({
-    summary: state.summarizerResult.summary as string,
-    ideas: Array.isArray(state.ideaGeneratorResult.ideas)
-      ? (state.ideaGeneratorResult.ideas as string[])
-      : [],
-  }));
 
 const { app, addEntrypoint } = createAgentApp(
   {
-    name: "ekubo-market-watcher-ai",
+    name: "ekubo-market-watcher",
     version: "0.1.0",
-    description: "Enhanced Ekubo pool monitoring with AI-powered market insights and analysis.",
+    description: "Real-time monitoring of new pools created on Ekubo.",
   },
   {
     config: configOverrides,
   }
 );
 
-addEntrypoint({
-  key: "brainstorm",
-  description:
-    "Summarise a topic and suggest three follow-up ideas using AxFlow.",
-  input: z.object({
-    topic: z
-      .string()
-      .min(1, { message: "Provide a topic to analyse." })
-      .describe("High level topic to explore."),
-  }),
-  output: z.object({
-    summary: z.string(),
-    ideas: z.array(z.string()),
-  }),
-  async handler(ctx) {
-    const topic = String(ctx.input.topic ?? "").trim();
-    if (!topic) {
-      throw new Error("Topic cannot be empty.");
-    }
-
-    const llm = axClient.ax;
-    if (!llm) {
-      const fallbackSummary = `AxFlow is not configured. Pretend summary for "${topic}".`;
-      return {
-        output: {
-          summary: fallbackSummary,
-          ideas: [
-            "Set OPENAI_API_KEY to enable the Ax integration.",
-            "Provide a PRIVATE_KEY so x402 can sign requests.",
-            "Re-run the request once credentials are configured.",
-          ],
-        },
-        model: "axllm-fallback",
-      };
-    }
-
-    const result = await brainstormingFlow.forward(llm, { topic });
-    const usageEntry = brainstormingFlow.getUsage().at(-1);
-    brainstormingFlow.resetUsage();
-
-    return {
-      output: {
-        summary: result.summary ?? "",
-        ideas: Array.isArray(result.ideas) ? result.ideas : [],
-      },
-      model: usageEntry?.model,
-    };
-  },
-});
 
 console.log(`📝 Agent app created, adding pool monitoring entrypoints...`);
 

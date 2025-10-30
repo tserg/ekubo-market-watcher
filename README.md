@@ -1,11 +1,10 @@
-# Ekubo Market Watcher AI
+# Ekubo Market Watcher
 
-An enhanced Daydreams x402 agent that combines real-time Ekubo pool monitoring with AI-powered market insights. Retrieve the latest pools created on Ekubo and get intelligent analysis using advanced language models.
+A Daydreams x402 service that allows anyone to retrieve the latest pools created on Ekubo in the last X minutes/hours by listening to `PoolInitialized` events from the Ekubo Core contract on Starknet.
 
 ## Features
 
 - 🚀 **Real-time pool discovery**: Monitors `PoolInitialized` events from Ekubo Core contract
-- 🤖 **AI-powered analysis**: Intelligent brainstorming and market insights using language models
 - ⏰ **Flexible time windows**: Query pools created in the last minutes or hours
 - 🔄 **Smart caching**: 60-second cache to reduce RPC calls and improve performance
 - 🌐 **Multi-network support**: Supports both Starknet mainnet and testnet
@@ -69,31 +68,7 @@ LOG_LEVEL=info
 
 ## Available Entrypoints
 
-### 1. Brainstorm Market Analysis
-
-**Key**: `brainstorm`
-
-**Description**: Generate AI-powered summaries and insights about DeFi topics and market trends.
-
-**Input**:
-```json
-{
-  "topic": "Ekubo pool strategies and liquidity provision"
-}
-```
-
-**Response**:
-```json
-{
-  "output": {
-    "summary": "Two concise sentences describing the topic.",
-    "ideas": ["Idea 1", "Idea 2", "Idea 3"]
-  },
-  "model": "gpt-4"
-}
-```
-
-### 2. List Latest Pools by Minutes
+### 1. List Latest Pools by Minutes
 
 **Key**: `list-latest-pools`
 
@@ -138,7 +113,7 @@ LOG_LEVEL=info
 }
 ```
 
-### 3. List Pools by Hours
+### 2. List Pools by Hours
 
 **Key**: `list-pools-by-hours`
 
@@ -162,14 +137,13 @@ LOG_LEVEL=info
 
 ## Architecture
 
-The agent combines blockchain monitoring with AI-powered analysis:
+The service follows an on-demand architecture similar to the reference Uniswap market watcher:
 
 1. **Event Listening**: Queries `PoolInitialized` events from Ekubo Core contract using `starknet.js`
-2. **AI Integration**: Uses `@ax-llm/ax` for intelligent topic analysis and brainstorming
-3. **Time-based Filtering**: Calculates block ranges based on specified time windows
-4. **Smart Caching**: 60-second cache to reduce RPC calls and improve response times
-5. **Data Extraction**: Parses event data to extract pool information with complete event structure
-6. **Agent API**: Provides clean JSON responses through Daydreams agent entrypoints
+2. **Time-based Filtering**: Calculates block ranges based on specified time windows
+3. **Smart Caching**: 60-second cache to reduce RPC calls and improve response times
+4. **Data Extraction**: Parses event data to extract pool information (placeholder implementation)
+5. **REST API**: Provides clean JSON responses through Daydreams agent entrypoints
 
 ## Implementation Notes
 
