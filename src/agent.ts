@@ -1,60 +1,159 @@
 import { z } from "zod";
-import { createAgentApp } from "@lucid-dreams/agent-kit";
+import {
+  createAgentApp,
+  createAxLLMClient,
+  AgentKitConfig,
+} from "@lucid-dreams/agent-kit";
+import { flow } from "@ax-llm/ax";
 import { Account, Contract, RpcProvider } from "starknet";
 import { config, validateConfig, logConfig } from "./config";
+import dotenv from "dotenv";
 
-// PoolInitialized event selector
-const POOL_INITIALIZED_EVENT_SELECTOR = "0x25ccf80ee62b2ca9b97c76ccea317c7f450fd6efb6ed6ea56da21d7bb9da5f1";
+// Load environment variables
+dotenv.config();
+
+/**
+ * Enhanced Ekubo Market Watcher with AI-powered analysis capabilities.
+ * Combines pool monitoring with AI insights and brainstorming features.
+ *
+ * Required environment variables:
+ *   - OPENAI_API_KEY   (passed through to @ax-llm/ax)
+ *   - PRIVATE_KEY      (used for x402 payments)
+ */
 
 // Validate configuration on startup
 validateConfig();
 logConfig();
 
-// Configure agent options for x402 payments and metadata
-const agentOptions = {
-  // Payment configuration
+// Enhanced agent configuration combining both approaches
+const configOverrides: AgentKitConfig = {
   payments: {
-    // Default price for entrypoints (in wei/base units)
-    defaultPrice: process.env.DEFAULT_PRICE || "1000",
-    // Address to receive payments (from environment) - null if not provided
-    payTo: process.env.PAY_TO || null,
+    facilitatorUrl:
+      (process.env.FACILITATOR_URL as any) ??
+      "https://facilitator.daydreams.systems",
+    payTo:
+      (process.env.PAY_TO as `0x${string}`) ??
+      "0xb308ed39d67D0d4BAe5BC2FAEF60c66BBb6AE429",
+    network: (process.env.NETWORK as any) ?? "base",
+    defaultPrice: process.env.DEFAULT_PRICE ?? "1000",
   },
-
-  // Network configuration
   network: {
-    // Payment network from environment
     paymentNetwork: process.env.NETWORK || "base-sepolia",
-    // RPC URL for trust interactions
     rpcUrl: process.env.RPC_URL,
-    // Auto-register identity at startup
     registerIdentity: process.env.REGISTER_IDENTITY === "true",
   },
-
-  // Facilitator configuration for x402
   facilitator: {
-    // Facilitator API URL from environment
     url: process.env.FACILITATOR_URL || "https://facilitator.daydreams.systems",
   },
-
-  // Trust metadata (optional)
   trust: {
-    // Trust score or metadata about this agent
     score: 100,
-    description: "Reliable Ekubo pool monitoring service with real-time event detection",
-    tags: ["defi", "ekubo", "starknet", "pools", "monitoring"],
+    description: "Enhanced Ekubo pool monitoring with AI-powered market insights and analysis",
+    tags: ["defi", "ekubo", "starknet", "pools", "monitoring", "ai", "analysis"],
   },
 };
 
+const axClient = createAxLLMClient({
+  logger: {
+    warn(message, error) {
+      if (error) {
+        console.warn(`[examples] ${message}`, error);
+      } else {
+        console.warn(`[examples] ${message}`);
+      }
+    },
+  },
+});
+
+if (!axClient.isConfigured()) {
+  console.warn(
+    "[examples] Ax LLM provider not configured — the flow will fall back to scripted output."
+  );
+}
+
+const brainstormingFlow = flow<{ topic: string }>()
+  .node(
+    "summarizer",
+    'topic:string -> summary:string "Two concise sentences describing the topic."'
+  )
+  .node(
+    "ideaGenerator",
+    'summary:string -> ideas:string[] "Three short follow-up ideas."'
+  )
+  .execute("summarizer", (state) => ({
+    topic: state.topic,
+  }))
+  .execute("ideaGenerator", (state) => ({
+    summary: state.summarizerResult.summary as string,
+  }))
+  .returns((state) => ({
+    summary: state.summarizerResult.summary as string,
+    ideas: Array.isArray(state.ideaGeneratorResult.ideas)
+      ? (state.ideaGeneratorResult.ideas as string[])
+      : [],
+  }));
+
 const { app, addEntrypoint } = createAgentApp(
   {
-    name: "ekubo-market-watcher",
+    name: "ekubo-market-watcher-ai",
     version: "0.1.0",
-    description: "Discover new pools on Ekubo on Starknet",
+    description: "Enhanced Ekubo pool monitoring with AI-powered market insights and analysis.",
   },
-  agentOptions
+  {
+    config: configOverrides,
+  }
 );
 
-console.log(`📝 Agent app created, adding entrypoints...`);
+addEntrypoint({
+  key: "brainstorm",
+  description:
+    "Summarise a topic and suggest three follow-up ideas using AxFlow.",
+  input: z.object({
+    topic: z
+      .string()
+      .min(1, { message: "Provide a topic to analyse." })
+      .describe("High level topic to explore."),
+  }),
+  output: z.object({
+    summary: z.string(),
+    ideas: z.array(z.string()),
+  }),
+  async handler(ctx) {
+    const topic = String(ctx.input.topic ?? "").trim();
+    if (!topic) {
+      throw new Error("Topic cannot be empty.");
+    }
+
+    const llm = axClient.ax;
+    if (!llm) {
+      const fallbackSummary = `AxFlow is not configured. Pretend summary for "${topic}".`;
+      return {
+        output: {
+          summary: fallbackSummary,
+          ideas: [
+            "Set OPENAI_API_KEY to enable the Ax integration.",
+            "Provide a PRIVATE_KEY so x402 can sign requests.",
+            "Re-run the request once credentials are configured.",
+          ],
+        },
+        model: "axllm-fallback",
+      };
+    }
+
+    const result = await brainstormingFlow.forward(llm, { topic });
+    const usageEntry = brainstormingFlow.getUsage().at(-1);
+    brainstormingFlow.resetUsage();
+
+    return {
+      output: {
+        summary: result.summary ?? "",
+        ideas: Array.isArray(result.ideas) ? result.ideas : [],
+      },
+      model: usageEntry?.model,
+    };
+  },
+});
+
+console.log(`📝 Agent app created, adding pool monitoring entrypoints...`);
 
 // PoolInitialized event interface based on actual Ekubo Core contract
 interface PoolInitializedEvent {
@@ -100,7 +199,7 @@ async function fetchPoolInitializedEvents(
       address: contractAddress,
       from_block: { block_number: fromBlock },
       to_block: { block_number: toBlock },
-      keys: [[POOL_INITIALIZED_EVENT_SELECTOR]], // Event selector constant
+      keys: [[config.ekubo.eventSelector]], // Event selector from config (nested array)
       chunk_size: 1000
     });
 
@@ -127,11 +226,6 @@ async function fetchPoolInitializedEvents(
 // Extract pool data from PoolInitialized event based on actual Ekubo Core structure
 function extractPoolEventData(event: any): PoolInitializedEvent | null {
   try {
-    // PoolInitialized event contains:
-    // - pool_key: [token0, token1, fee, tick_spacing, extension]
-    // - initial_tick: i129
-    // - sqrt_ratio: u256
-
     const data = event.data || [];
     if (data.length < 7) {
       console.warn("Insufficient event data:", data);
@@ -150,7 +244,7 @@ function extractPoolEventData(event: any): PoolInitializedEvent | null {
       sqrt_ratio: data[6] || "0",
       block_number: Number(event.block_number || 0),
       transaction_hash: event.transaction_hash || "",
-      timestamp: Date.now() // Placeholder - should get from block timestamp
+      timestamp: Date.now()
     };
   } catch (error) {
     console.error("Error extracting PoolInitialized event data:", error);
@@ -160,7 +254,6 @@ function extractPoolEventData(event: any): PoolInitializedEvent | null {
 
 // Get latest pools within specified time window
 async function getLatestPools(minutes: number, network: string = "mainnet"): Promise<PoolInitializedEvent[]> {
-  // Validate input
   if (minutes < 1 || minutes > config.network.maxLookbackMinutes) {
     throw new Error(`Minutes must be between 1 and ${config.network.maxLookbackMinutes}`);
   }
@@ -209,7 +302,7 @@ addEntrypoint({
     minutes: z.number().min(1).max(1440).default(60).describe("Time window in minutes (1-1440)"),
     network: z.enum(["mainnet", "testnet"]).default("mainnet").describe("Starknet network"),
   }),
-  price: "2000", // 2x default price for premium real-time data
+  price: "2000",
 
   handler: async ({ input }) => {
     console.log(`🎯 [list-latest-pools] Called with input:`, input);
@@ -225,13 +318,9 @@ addEntrypoint({
             tick_spacing: pool.pool_key.tick_spacing,
             extension: pool.pool_key.extension,
           },
-          initial_tick: pool.initial_tick,
-          sqrt_ratio: pool.sqrt_ratio,
-          created_at: {
-            block_number: pool.block_number,
-            transaction_hash: pool.transaction_hash,
-            timestamp: pool.timestamp
-          }
+          block_number: pool.block_number,
+          transaction_hash: pool.transaction_hash,
+          timestamp: pool.timestamp
         })),
         count: pools.length,
         timeframe: {
@@ -243,7 +332,6 @@ addEntrypoint({
   },
 });
 
-// Additional entrypoint for getting pools by time window in hours
 console.log(`➕ Adding entrypoint: list-pools-by-hours`);
 addEntrypoint({
   key: "list-pools-by-hours",
@@ -252,7 +340,7 @@ addEntrypoint({
     hours: z.number().min(0.1).max(24).default(1).describe("Time window in hours (0.1-24)"),
     network: z.enum(["mainnet", "testnet"]).default("mainnet").describe("Starknet network"),
   }),
-  price: "3000", // 3x default price for longer time windows
+  price: "3000",
 
   handler: async ({ input }) => {
     console.log(`🎯 [list-pools-by-hours] Called with input:`, input);
