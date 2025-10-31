@@ -192,7 +192,7 @@ addEntrypoint({
     minutes: z.number().min(1).max(1440).default(60).describe("Time window in minutes (1-1440)"),
     network: z.enum(["mainnet", "testnet"]).default("mainnet").describe("Starknet network"),
   }),
-  price: "2000",
+  price: "0.02",
 
   handler: async ({ input }) => {
     console.log(`🎯 [list-latest-pools] Called with input:`, input);
@@ -230,7 +230,7 @@ addEntrypoint({
     hours: z.number().min(0.1).max(24).default(1).describe("Time window in hours (0.1-24)"),
     network: z.enum(["mainnet", "testnet"]).default("mainnet").describe("Starknet network (mainnet/sepolia)"),
   }),
-  price: "3000",
+  price: "0.03",
 
   handler: async ({ input }) => {
     console.log(`🎯 [list-pools-by-hours] Called with input:`, input);
