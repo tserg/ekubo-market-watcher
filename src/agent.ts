@@ -192,6 +192,25 @@ addEntrypoint({
     minutes: z.string().min(1).max(1440).default("60").describe("Time window in minutes (1-1440)"),
     network: z.enum(["mainnet", "testnet"]).default("mainnet").describe("Starknet network"),
   }),
+  output: z.object({
+    pools: z.array(z.object({
+      pool_key: z.object({
+        token0: z.string(),
+        token1: z.string(),
+        fee: z.number(),
+        tick_spacing: z.number(),
+        extension: z.string(),
+      }),
+      block_number: z.number(),
+      transaction_hash: z.string(),
+      timestamp: z.number(),
+    })),
+    count: z.number(),
+    timeframe: z.object({
+      minutes: z.number(),
+      network: z.string(),
+    }),
+  }),
   price: "0.02",
 
   handler: async ({ input }) => {
@@ -200,25 +219,23 @@ addEntrypoint({
     const pools = await getLatestPools(minutes, input.network);
 
     return {
-      output: {
-        pools: pools.map(pool => ({
-          pool_key: {
-            token0: pool.pool_key.token0,
-            token1: pool.pool_key.token1,
-            fee: pool.pool_key.fee,
-            tick_spacing: pool.pool_key.tick_spacing,
-            extension: pool.pool_key.extension,
-          },
-          block_number: pool.block_number,
-          transaction_hash: pool.transaction_hash,
-          timestamp: pool.timestamp
-        })),
-        count: pools.length,
-        timeframe: {
-          minutes: input.minutes,
-          network: input.network
-        }
-      },
+      pools: pools.map(pool => ({
+        pool_key: {
+          token0: pool.pool_key.token0,
+          token1: pool.pool_key.token1,
+          fee: pool.pool_key.fee,
+          tick_spacing: pool.pool_key.tick_spacing,
+          extension: pool.pool_key.extension,
+        },
+        block_number: pool.block_number,
+        transaction_hash: pool.transaction_hash,
+        timestamp: pool.timestamp
+      })),
+      count: pools.length,
+      timeframe: {
+        minutes: minutes,
+        network: input.network
+      }
     };
   },
 });
@@ -231,6 +248,30 @@ addEntrypoint({
     hours: z.string().min(1).max(24).default("1").describe("Time window in hours (0.1-24)"),
     network: z.enum(["mainnet", "testnet"]).default("mainnet").describe("Starknet network (mainnet/sepolia)"),
   }),
+  output: z.object({
+    pools: z.array(z.object({
+      pool_key: z.object({
+        token0: z.string(),
+        token1: z.string(),
+        fee: z.number(),
+        tick_spacing: z.number(),
+        extension: z.string(),
+      }),
+      initial_tick: z.number(),
+      sqrt_ratio: z.string(),
+      created_at: z.object({
+        block_number: z.number(),
+        transaction_hash: z.string(),
+        timestamp: z.number(),
+      }),
+    })),
+    count: z.number(),
+    timeframe: z.object({
+      hours: z.number(),
+      minutes: z.number(),
+      network: z.string(),
+    }),
+  }),
   price: "0.03",
 
   handler: async ({ input }) => {
@@ -240,30 +281,28 @@ addEntrypoint({
     const pools = await getLatestPools(minutes, input.network);
 
     return {
-      output: {
-        pools: pools.map(pool => ({
-          pool_key: {
-            token0: pool.pool_key.token0,
-            token1: pool.pool_key.token1,
-            fee: pool.pool_key.fee,
-            tick_spacing: pool.pool_key.tick_spacing,
-            extension: pool.pool_key.extension,
-          },
-          initial_tick: pool.initial_tick,
-          sqrt_ratio: pool.sqrt_ratio,
-          created_at: {
-            block_number: pool.block_number,
-            transaction_hash: pool.transaction_hash,
-            timestamp: pool.timestamp
-          }
-        })),
-        count: pools.length,
-        timeframe: {
-          hours: input.hours,
-          minutes: minutes,
-          network: input.network
+      pools: pools.map(pool => ({
+        pool_key: {
+          token0: pool.pool_key.token0,
+          token1: pool.pool_key.token1,
+          fee: pool.pool_key.fee,
+          tick_spacing: pool.pool_key.tick_spacing,
+          extension: pool.pool_key.extension,
+        },
+        initial_tick: pool.initial_tick,
+        sqrt_ratio: pool.sqrt_ratio,
+        created_at: {
+          block_number: pool.block_number,
+          transaction_hash: pool.transaction_hash,
+          timestamp: pool.timestamp
         }
-      },
+      })),
+      count: pools.length,
+      timeframe: {
+        hours: hours,
+        minutes: minutes,
+        network: input.network
+      }
     };
   },
 });
