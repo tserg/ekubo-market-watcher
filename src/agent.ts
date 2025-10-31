@@ -22,31 +22,12 @@ dotenv.config();
 validateConfig();
 logConfig();
 
-// Agent configuration for Ekubo pool monitoring
+// Agent configuration using config from src/config.ts
 const configOverrides: AgentKitConfig = {
-  payments: {
-    facilitatorUrl:
-      (process.env.FACILITATOR_URL as any) ??
-      "https://facilitator.daydreams.systems",
-    payTo:
-      (process.env.PAY_TO as `0x${string}`) ??
-      "0xb308ed39d67D0d4BAe5BC2FAEF60c66BBb6AE429",
-    network: (process.env.NETWORK as any) ?? "base",
-    defaultPrice: process.env.DEFAULT_PRICE ?? "1000",
-  },
-  network: {
-    paymentNetwork: process.env.NETWORK || "base-sepolia",
-    rpcUrl: process.env.RPC_URL,
-    registerIdentity: process.env.REGISTER_IDENTITY === "true",
-  },
-  facilitator: {
-    url: process.env.FACILITATOR_URL || "https://facilitator.daydreams.systems",
-  },
-  trust: {
-    score: 100,
-    description: "Reliable Ekubo pool monitoring service with real-time event detection",
-    tags: ["defi", "ekubo", "starknet", "pools", "monitoring"],
-  },
+  payments: config.agent.payments,
+  network: config.agent.paymentNetwork,
+  facilitator: config.agent.facilitator,
+  trust: config.agent.trust,
 };
 
 

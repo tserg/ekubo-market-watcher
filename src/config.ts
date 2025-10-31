@@ -26,6 +26,27 @@ export interface Config {
   logging: {
     level: "debug" | "info" | "warn" | "error";
   };
+  agent: {
+    payments: {
+      facilitatorUrl: string;
+      payTo: string;
+      network: string;
+      defaultPrice: string;
+    };
+    paymentNetwork: {
+      paymentNetwork: string;
+      rpcUrl?: string;
+      registerIdentity: boolean;
+    };
+    facilitator: {
+      url: string;
+    };
+    trust: {
+      score: number;
+      description: string;
+      tags: string[];
+    };
+  };
 }
 
 export const config: Config = {
@@ -51,6 +72,27 @@ export const config: Config = {
   },
   logging: {
     level: (process.env.LOG_LEVEL as "debug" | "info" | "warn" | "error") || "info",
+  },
+  agent: {
+    payments: {
+      facilitatorUrl: process.env.FACILITATOR_URL ?? "https://facilitator.daydreams.systems",
+      payTo: process.env.PAY_TO as `0x${string}` ?? "0xb308ed39d67D0d4BAe5BC2FAEF60c66BBb6AE429",
+      network: process.env.NETWORK ?? "base",
+      defaultPrice: process.env.DEFAULT_PRICE ?? "1000",
+    },
+    paymentNetwork: {
+      paymentNetwork: process.env.NETWORK || "base-sepolia",
+      rpcUrl: process.env.RPC_URL,
+      registerIdentity: process.env.REGISTER_IDENTITY === "true",
+    },
+    facilitator: {
+      url: process.env.FACILITATOR_URL || "https://facilitator.daydreams.systems",
+    },
+    trust: {
+      score: 100,
+      description: "Reliable Ekubo pool monitoring service with real-time event detection",
+      tags: ["defi", "ekubo", "starknet", "pools", "monitoring"],
+    },
   },
 };
 
