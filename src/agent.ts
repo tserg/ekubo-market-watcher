@@ -189,9 +189,9 @@ addEntrypoint({
   key: "list-latest-pools",
   description: "Returns a list of new pools created in the given timeframe.",
   input: z.object({
-    minutes: z.union([z.number(), z.string()]).transform(Number).refine(n => !isNaN(n) && n >= 1 && n <= 1440, {
+    minutes: z.string().transform(Number).refine(n => !isNaN(n) && n >= 1 && n <= 1440, {
       message: "Minutes must be a number between 1 and 1440"
-    }).default(60).describe("Time window in minutes (1-1440)"),
+    }).default("60").describe("Time window in minutes (1-1440)"),
     network: z.enum(["mainnet", "testnet"]).default("mainnet").describe("Starknet network"),
   }),
   price: "0.02",
@@ -229,9 +229,9 @@ addEntrypoint({
   key: "list-pools-by-hours",
   description: "Returns a list of new pools created in the specified number of hours.",
   input: z.object({
-    hours: z.union([z.number(), z.string()]).transform(Number).refine(n => !isNaN(n) && n >= 0.1 && n <= 24, {
+    hours: z.string().transform(Number).refine(n => !isNaN(n) && n >= 0.1 && n <= 24, {
       message: "Hours must be a number between 0.1 and 24"
-    }).default(1).describe("Time window in hours (0.1-24)"),
+    }).default("1").describe("Time window in hours (0.1-24)"),
     network: z.enum(["mainnet", "testnet"]).default("mainnet").describe("Starknet network (mainnet/sepolia)"),
   }),
   price: "0.03",
