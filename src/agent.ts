@@ -228,7 +228,7 @@ addEntrypoint({
   description: "Returns a list of new pools created in the specified number of hours.",
   input: z.object({
     hours: z.number().min(0.1).max(24).default(1).describe("Time window in hours (0.1-24)"),
-    network: z.enum(["mainnet", "testnet"]).default("mainnet").describe("Starknet network"),
+    network: z.enum(["mainnet", "testnet"]).default("mainnet").describe("Starknet network (mainnet/sepolia)"),
   }),
   price: "3000",
 
