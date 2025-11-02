@@ -219,6 +219,23 @@ async function getLatestPools(minutes: number, network: string = "mainnet"): Pro
 
   if (config.logging.level === "info") {
     console.log(`🔍 Search complete: ${allPools.length} total pools found, ${filteredPools.length} within last ${minutes} minutes`);
+
+    // Debug: Show detailed information about all pools found
+    console.log(`📊 Pool details found:`);
+    allPools.forEach((pool, i) => {
+      const ageHours = (Math.floor(Date.now() / 1000) - pool.timestamp) / 3600;
+      const poolDate = pool.timestamp > 0 ? new Date(pool.timestamp * 1000).toISOString() : 'No timestamp';
+      console.log(`   ${i+1}. Pool: ${pool.transaction_hash.slice(0, 10)}...`);
+      console.log(`      Token0: ${pool.pool_key.token0.slice(0, 10)}...`);
+      console.log(`      Token1: ${pool.pool_key.token1.slice(0, 10)}...`);
+      console.log(`      Fee: ${pool.pool_key.fee}`);
+      console.log(`      Block: ${pool.block_number}`);
+      console.log(`      Timestamp: ${pool.timestamp}`);
+      console.log(`      Date: ${poolDate}`);
+      console.log(`      Age: ${ageHours.toFixed(1)} hours ago`);
+      console.log(`      Within 24h: ${pool.timestamp >= cutoffTimeInSeconds}`);
+      console.log(`      ------------------------`);
+    });
   }
 
   // Update cache with all pools found (not just filtered ones)
