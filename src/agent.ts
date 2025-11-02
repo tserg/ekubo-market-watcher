@@ -78,7 +78,8 @@ function getRpcProvider(network: string = "mainnet"): RpcProvider {
 async function fetchPoolInitializedEvents(
   fromBlock: number,
   toBlock: number,
-  network: string = "mainnet"
+  network: string = "mainnet",
+  timeWindowMinutes?: number
 ): Promise<PoolInitializedEvent[]> {
   const provider = getRpcProvider(network);
   const contractAddress = config.ekubo.coreAddresses[network as keyof typeof config.ekubo.coreAddresses];
@@ -100,6 +101,21 @@ async function fetchPoolInitializedEvents(
       if (eventData) {
         pools.push(eventData);
       }
+    }
+
+    // Apply time-based filtering if time window is specified
+    if (timeWindowMinutes !== undefined) {
+      const cutoffTime = Date.now() - (timeWindowMinutes * 60 * 1000);
+      const filteredPools = pools.filter(pool => {
+        const poolTime = pool.timestamp * 1000; // Convert seconds to milliseconds
+        return poolTime >= cutoffTime;
+      });
+
+      if (config.logging.level === "debug") {
+        console.debug(`Found ${pools.length} total events, filtered to ${filteredPools.length} events within last ${timeWindowMinutes} minutes`);
+      }
+
+      return filteredPools;
     }
 
     if (config.logging.level === "debug") {
@@ -165,8 +181,8 @@ async function getLatestPools(minutes: number, network: string = "mainnet"): Pro
     return Array.from(poolCache.values());
   }
 
-  // Fetch fresh data
-  const pools = await fetchPoolInitializedEvents(fromBlock, currentBlock, network);
+  // Fetch fresh data with time-based filtering
+  const pools = await fetchPoolInitializedEvents(fromBlock, currentBlock, network, minutes);
 
   // Update cache
   poolCache.clear();
