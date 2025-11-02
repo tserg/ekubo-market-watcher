@@ -217,17 +217,17 @@ async function getLatestPools(minutes: number, network: string = "mainnet"): Pro
     console.log(`🔍 Search complete: ${allPools.length} total pools found, ${filteredPools.length} within last ${minutes} minutes`);
   }
 
-  // Update cache
+  // Update cache with all pools found (not just filtered ones)
   poolCache.clear();
   lastCacheUpdate.clear();
 
-  filteredPools.forEach(pool => {
+  allPools.forEach(pool => {
     poolCache.set(pool.transaction_hash, pool);
   });
   lastCacheUpdate.set(cacheKey, now);
 
   if (config.logging.level === "info") {
-    console.log(`Updated pool cache for ${network}: ${filteredPools.length} pools from last ${minutes} minutes`);
+    console.log(`Updated pool cache for ${network}: ${allPools.length} total pools, ${filteredPools.length} within last ${minutes} minutes`);
   }
 
   return filteredPools;
