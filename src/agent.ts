@@ -166,46 +166,50 @@ async function getLatestPools(minutes: number, network: string = "mainnet"): Pro
     return Array.from(poolCache.values()).filter(pool => pool.timestamp >= cutoffTimeInSeconds);
   }
 
-  // Search backwards in chunks until we find enough data
+  // Search backwards in chunks until the block range is older than our time window
   let allPools: PoolInitializedEvent[] = [];
   let fromBlock = Math.max(0, currentBlock - chunkSize);
   let toBlock = currentBlock;
-  let iterations = 0;
-  const maxIterations = 50; // Prevent infinite loops
 
   if (config.logging.level === "info") {
     console.log(`🔍 Starting chunk search for pools in last ${minutes} minutes (cutoff: ${cutoffTimeInSeconds})`);
   }
 
-  while (iterations < maxIterations) {
+  while (true) {
+    // Get the timestamp of the toBlock to check if this chunk is too old
+    try {
+      const toBlockInfo = await provider.getBlock(toBlock);
+      if (toBlockInfo && toBlockInfo.timestamp < cutoffTimeInSeconds) {
+        // This block range is older than our time window, we're done
+        if (config.logging.level === "debug") {
+          console.debug(`✅ Block ${toBlock} (timestamp: ${toBlockInfo.timestamp}) is older than cutoff (${cutoffTimeInSeconds}), stopping search`);
+        }
+        break;
+      }
+    } catch (error) {
+      if (config.logging.level === "debug") {
+        console.debug(`Could not get block ${toBlock} info, continuing search`);
+      }
+    }
+
     const chunkPools = await fetchPoolInitializedEvents(fromBlock, toBlock, network);
 
     if (config.logging.level === "debug") {
-      console.debug(`Chunk ${iterations + 1}: Searching blocks ${fromBlock}-${toBlock}, found ${chunkPools.length} pools`);
+      console.debug(`Chunk: Searching blocks ${fromBlock}-${toBlock}, found ${chunkPools.length} pools`);
     }
 
     // Add pools from this chunk
     allPools.push(...chunkPools);
 
-    // Check if we have any pools older than our cutoff
-    const oldestPoolInChunk = chunkPools.length > 0 ?
-      Math.min(...chunkPools.map(p => p.timestamp)) : Infinity;
-
-    if (oldestPoolInChunk < cutoffTimeInSeconds) {
-      // We've gone back far enough to include pools outside our window
-      if (config.logging.level === "debug") {
-        console.debug(`✅ Found pools older than cutoff time, stopping search`);
-      }
-      break;
-    }
-
     // Move to next chunk
     toBlock = fromBlock - 1;
     fromBlock = Math.max(0, fromBlock - chunkSize);
-    iterations++;
 
-    // Safety check: don't go past block 0
+    // Stop if we've reached the beginning of the blockchain
     if (fromBlock === 0 && toBlock === 0) {
+      if (config.logging.level === "debug") {
+        console.debug(`🔚 Reached block 0, stopping search`);
+      }
       break;
     }
   }
