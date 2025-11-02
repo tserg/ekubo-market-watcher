@@ -134,7 +134,7 @@ function extractPoolEventData(event: any): PoolInitializedEvent | null {
       sqrt_ratio: data[6] || "0",
       block_number: Number(event.block_number || 0),
       transaction_hash: event.transaction_hash || "",
-      timestamp: Date.now()
+      timestamp: Number(event.block_timestamp || 0)
     };
   } catch (error) {
     console.error("Error extracting PoolInitialized event data:", error);
