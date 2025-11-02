@@ -67,7 +67,7 @@ export const config: Config = {
     maxCacheSize: parseInt(process.env.MAX_POOL_CACHE_SIZE || "1000"),
   },
   network: {
-    blocksPerMinute: parseInt(process.env.BLOCKS_PER_MINUTE || "60"), // Approximate
+    blockChunkSize: parseInt(process.env.BLOCK_CHUNK_SIZE || "10000"), // Blocks to search in each iteration
     maxLookbackMinutes: parseInt(process.env.MAX_LOOKBACK_MINUTES || "1440"), // 24 hours
   },
   logging: {

@@ -78,8 +78,7 @@ function getRpcProvider(network: string = "mainnet"): RpcProvider {
 async function fetchPoolInitializedEvents(
   fromBlock: number,
   toBlock: number,
-  network: string = "mainnet",
-  timeWindowMinutes?: number
+  network: string = "mainnet"
 ): Promise<PoolInitializedEvent[]> {
   const provider = getRpcProvider(network);
   const contractAddress = config.ekubo.coreAddresses[network as keyof typeof config.ekubo.coreAddresses];
@@ -101,25 +100,6 @@ async function fetchPoolInitializedEvents(
       if (eventData) {
         pools.push(eventData);
       }
-    }
-
-    // Apply time-based filtering if time window is specified
-    if (timeWindowMinutes !== undefined) {
-      const currentTimeInSeconds = Math.floor(Date.now() / 1000);
-      const cutoffTimeInSeconds = currentTimeInSeconds - (timeWindowMinutes * 60);
-      const filteredPools = pools.filter(pool => {
-        return pool.timestamp >= cutoffTimeInSeconds;
-      });
-
-      if (config.logging.level === "debug" || config.logging.level === "info") {
-        console.debug(`Found ${pools.length} total events, filtered to ${filteredPools.length} events within last ${timeWindowMinutes} minutes`);
-        console.debug(`Current time: ${currentTimeInSeconds}, Cutoff time: ${cutoffTimeInSeconds}`);
-        filteredPools.forEach((pool, i) => {
-          console.debug(`Pool ${i+1}: timestamp=${pool.timestamp}, tx=${pool.transaction_hash.slice(0, 10)}...`);
-        });
-      }
-
-      return filteredPools;
     }
 
     if (config.logging.level === "debug") {
@@ -162,7 +142,7 @@ function extractPoolEventData(event: any): PoolInitializedEvent | null {
   }
 }
 
-// Get latest pools within specified time window
+// Get latest pools within specified time window using chunk-based approach
 async function getLatestPools(minutes: number, network: string = "mainnet"): Promise<PoolInitializedEvent[]> {
   if (minutes < 1 || minutes > config.network.maxLookbackMinutes) {
     throw new Error(`Minutes must be between 1 and ${config.network.maxLookbackMinutes}`);
@@ -170,38 +150,87 @@ async function getLatestPools(minutes: number, network: string = "mainnet"): Pro
 
   const provider = getRpcProvider(network);
   const currentBlock = await provider.getBlockNumber();
-  const lookbackBlocks = Math.ceil(minutes * config.network.blocksPerMinute);
-  const fromBlock = Math.max(0, currentBlock - lookbackBlocks);
+  const cutoffTimeInSeconds = Math.floor(Date.now() / 1000) - (minutes * 60);
+  const chunkSize = config.network.blockChunkSize;
 
-  // Check cache first
-  const cacheKey = `${network}-${fromBlock}-${currentBlock}`;
+  // Check cache first - use time-based cache key
+  const cacheKey = `${network}-${minutes}`;
   const lastUpdate = lastCacheUpdate.get(cacheKey) || 0;
   const now = Date.now();
 
-  if (poolCache.has(cacheKey) && (now - lastUpdate) < config.cache.ttlMs) {
+  if (poolCache.size > 0 && (now - lastUpdate) < config.cache.ttlMs) {
     if (config.logging.level === "debug") {
       console.debug(`Using cached pools for ${network} (${poolCache.size} pools)`);
     }
-    return Array.from(poolCache.values());
+    // Filter cached pools to match the requested timeframe
+    return Array.from(poolCache.values()).filter(pool => pool.timestamp >= cutoffTimeInSeconds);
   }
 
-  // Fetch fresh data with time-based filtering
-  const pools = await fetchPoolInitializedEvents(fromBlock, currentBlock, network, minutes);
+  // Search backwards in chunks until we find enough data
+  let allPools: PoolInitializedEvent[] = [];
+  let fromBlock = Math.max(0, currentBlock - chunkSize);
+  let toBlock = currentBlock;
+  let iterations = 0;
+  const maxIterations = 50; // Prevent infinite loops
+
+  if (config.logging.level === "info") {
+    console.log(`🔍 Starting chunk search for pools in last ${minutes} minutes (cutoff: ${cutoffTimeInSeconds})`);
+  }
+
+  while (iterations < maxIterations) {
+    const chunkPools = await fetchPoolInitializedEvents(fromBlock, toBlock, network);
+
+    if (config.logging.level === "debug") {
+      console.debug(`Chunk ${iterations + 1}: Searching blocks ${fromBlock}-${toBlock}, found ${chunkPools.length} pools`);
+    }
+
+    // Add pools from this chunk
+    allPools.push(...chunkPools);
+
+    // Check if we have any pools older than our cutoff
+    const oldestPoolInChunk = chunkPools.length > 0 ?
+      Math.min(...chunkPools.map(p => p.timestamp)) : Infinity;
+
+    if (oldestPoolInChunk < cutoffTimeInSeconds) {
+      // We've gone back far enough to include pools outside our window
+      if (config.logging.level === "debug") {
+        console.debug(`✅ Found pools older than cutoff time, stopping search`);
+      }
+      break;
+    }
+
+    // Move to next chunk
+    toBlock = fromBlock - 1;
+    fromBlock = Math.max(0, fromBlock - chunkSize);
+    iterations++;
+
+    // Safety check: don't go past block 0
+    if (fromBlock === 0 && toBlock === 0) {
+      break;
+    }
+  }
+
+  // Filter all pools by time
+  const filteredPools = allPools.filter(pool => pool.timestamp >= cutoffTimeInSeconds);
+
+  if (config.logging.level === "info") {
+    console.log(`🔍 Search complete: ${allPools.length} total pools found, ${filteredPools.length} within last ${minutes} minutes`);
+  }
 
   // Update cache
   poolCache.clear();
   lastCacheUpdate.clear();
 
-  pools.forEach(pool => {
+  filteredPools.forEach(pool => {
     poolCache.set(pool.transaction_hash, pool);
   });
   lastCacheUpdate.set(cacheKey, now);
 
   if (config.logging.level === "info") {
-    console.log(`Updated pool cache for ${network}: ${pools.length} pools from last ${minutes} minutes`);
+    console.log(`Updated pool cache for ${network}: ${filteredPools.length} pools from last ${minutes} minutes`);
   }
 
-  return pools;
+  return filteredPools;
 }
 
 console.log(`➕ Adding entrypoint: list-latest-pools`);
