@@ -105,14 +105,18 @@ async function fetchPoolInitializedEvents(
 
     // Apply time-based filtering if time window is specified
     if (timeWindowMinutes !== undefined) {
-      const cutoffTime = Date.now() - (timeWindowMinutes * 60 * 1000);
+      const currentTimeInSeconds = Math.floor(Date.now() / 1000);
+      const cutoffTimeInSeconds = currentTimeInSeconds - (timeWindowMinutes * 60);
       const filteredPools = pools.filter(pool => {
-        const poolTime = pool.timestamp * 1000; // Convert seconds to milliseconds
-        return poolTime >= cutoffTime;
+        return pool.timestamp >= cutoffTimeInSeconds;
       });
 
-      if (config.logging.level === "debug") {
+      if (config.logging.level === "debug" || config.logging.level === "info") {
         console.debug(`Found ${pools.length} total events, filtered to ${filteredPools.length} events within last ${timeWindowMinutes} minutes`);
+        console.debug(`Current time: ${currentTimeInSeconds}, Cutoff time: ${cutoffTimeInSeconds}`);
+        filteredPools.forEach((pool, i) => {
+          console.debug(`Pool ${i+1}: timestamp=${pool.timestamp}, tx=${pool.transaction_hash.slice(0, 10)}...`);
+        });
       }
 
       return filteredPools;
