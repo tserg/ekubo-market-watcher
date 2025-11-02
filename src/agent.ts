@@ -64,6 +64,8 @@ interface PoolInitializedEvent {
 // Cache for storing recent pools
 const poolCache = new Map<string, PoolInitializedEvent>();
 const lastCacheUpdate = new Map<string, number>();
+// Cache for storing block timestamps to avoid repeated RPC calls
+const blockTimestampCache = new Map<number, number>();
 
 // RPC Provider setup
 function getRpcProvider(network: string = "mainnet"): RpcProvider {
@@ -94,9 +96,45 @@ async function fetchPoolInitializedEvents(
     });
 
     const pools: PoolInitializedEvent[] = [];
+    const uniqueBlockNumbers = [...new Set(eventLogs.events.map(e => e.block_number))];
+
+    // Fetch block timestamps in batch (with caching)
+    const blockTimestamps = new Map<number, number>();
+    const uncachedBlockNumbers: number[] = [];
+
+    // Check cache first
+    for (const blockNumber of uniqueBlockNumbers) {
+      if (blockTimestampCache.has(blockNumber)) {
+        blockTimestamps.set(blockNumber, blockTimestampCache.get(blockNumber)!);
+      } else {
+        uncachedBlockNumbers.push(blockNumber);
+      }
+    }
+
+    // Fetch only uncached block timestamps
+    if (uncachedBlockNumbers.length > 0) {
+      if (config.logging.level === "debug") {
+        console.debug(`Fetching timestamps for ${uncachedBlockNumbers.length} uncached blocks`);
+      }
+
+      for (const blockNumber of uncachedBlockNumbers) {
+        try {
+          const blockInfo = await provider.getBlock(blockNumber);
+          if (blockInfo?.timestamp) {
+            const timestamp = Number(blockInfo.timestamp);
+            blockTimestamps.set(blockNumber, timestamp);
+            blockTimestampCache.set(blockNumber, timestamp); // Cache for future use
+          }
+        } catch (error) {
+          if (config.logging.level === "debug") {
+            console.debug(`Could not fetch block ${blockNumber} timestamp:`, error);
+          }
+        }
+      }
+    }
 
     for (const event of eventLogs.events) {
-      const eventData = extractPoolEventData(event);
+      const eventData = extractPoolEventData(event, provider, network, blockTimestamps.get(event.block_number));
       if (eventData) {
         pools.push(eventData);
       }
@@ -114,7 +152,7 @@ async function fetchPoolInitializedEvents(
 }
 
 // Extract pool data from PoolInitialized event based on actual Ekubo Core structure
-function extractPoolEventData(event: any): PoolInitializedEvent | null {
+function extractPoolEventData(event: any, provider: RpcProvider, network: string, blockTimestamp?: number): PoolInitializedEvent | null {
   try {
     const data = event.data || [];
     if (data.length < 7) {
@@ -134,7 +172,7 @@ function extractPoolEventData(event: any): PoolInitializedEvent | null {
       sqrt_ratio: data[6] || "0",
       block_number: Number(event.block_number || 0),
       transaction_hash: event.transaction_hash || "",
-      timestamp: Number(event.block_timestamp || 0)
+      timestamp: blockTimestamp || 0
     };
   } catch (error) {
     console.error("Error extracting PoolInitialized event data:", error);
