@@ -219,22 +219,24 @@ addEntrypoint({
     const pools = await getLatestPools(minutes, input.network);
 
     return {
-      pools: pools.map(pool => ({
-        pool_key: {
-          token0: pool.pool_key.token0,
-          token1: pool.pool_key.token1,
-          fee: pool.pool_key.fee,
-          tick_spacing: pool.pool_key.tick_spacing,
-          extension: pool.pool_key.extension,
-        },
-        block_number: pool.block_number,
-        transaction_hash: pool.transaction_hash,
-        timestamp: pool.timestamp
-      })),
-      count: pools.length,
-      timeframe: {
-        minutes: minutes,
-        network: input.network
+      output: {
+        pools: pools.map(pool => ({
+          pool_key: {
+            token0: pool.pool_key.token0,
+            token1: pool.pool_key.token1,
+            fee: pool.pool_key.fee,
+            tick_spacing: pool.pool_key.tick_spacing,
+            extension: pool.pool_key.extension,
+          },
+          block_number: pool.block_number,
+          transaction_hash: pool.transaction_hash,
+          timestamp: pool.timestamp
+        })),
+        count: pools.length,
+        timeframe: {
+          minutes: minutes,
+          network: input.network
+        }
       }
     };
   },
@@ -281,27 +283,29 @@ addEntrypoint({
     const pools = await getLatestPools(minutes, input.network);
 
     return {
-      pools: pools.map(pool => ({
-        pool_key: {
-          token0: pool.pool_key.token0,
-          token1: pool.pool_key.token1,
-          fee: pool.pool_key.fee,
-          tick_spacing: pool.pool_key.tick_spacing,
-          extension: pool.pool_key.extension,
-        },
-        initial_tick: pool.initial_tick,
-        sqrt_ratio: pool.sqrt_ratio,
-        created_at: {
-          block_number: pool.block_number,
-          transaction_hash: pool.transaction_hash,
-          timestamp: pool.timestamp
+      output: {
+        pools: pools.map(pool => ({
+          pool_key: {
+            token0: pool.pool_key.token0,
+            token1: pool.pool_key.token1,
+            fee: pool.pool_key.fee,
+            tick_spacing: pool.pool_key.tick_spacing,
+            extension: pool.pool_key.extension,
+          },
+          initial_tick: pool.initial_tick,
+          sqrt_ratio: pool.sqrt_ratio,
+          created_at: {
+            block_number: pool.block_number,
+            transaction_hash: pool.transaction_hash,
+            timestamp: pool.timestamp
+          }
+        })),
+        count: pools.length,
+        timeframe: {
+          hours: hours,
+          minutes: minutes,
+          network: input.network
         }
-      })),
-      count: pools.length,
-      timeframe: {
-        hours: hours,
-        minutes: minutes,
-        network: input.network
       }
     };
   },
