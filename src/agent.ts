@@ -134,7 +134,7 @@ async function getTokenSymbol(tokenAddress: string, network: string = "mainnet")
     const contract = new Contract(tokenAbi, tokenAddress, provider);
 
     // Try to call the symbol function directly (common in ERC20 tokens)
-    const symbolResponse = await contract.symbol({ blockIdentifier: 'latest' });
+    const symbolResponse = await contract.call('symbol', [], { blockIdentifier: 'latest' });
 
     // Helper function to decode felt to string
     const decodeFeltToString = (felt: bigint): string => {
