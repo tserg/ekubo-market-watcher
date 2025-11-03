@@ -91,7 +91,24 @@ async function getTokenSymbol(tokenAddress: string, network: string = "mainnet")
   }
 
   // First try to get symbol from our comprehensive Starknet token mapping
-  const mappedSymbol = getStarknetTokenSymbol(tokenAddress.toLowerCase());
+  // Handle addresses that might be missing the "0x" prefix or have dropped leading zeros
+  let normalizedAddress = tokenAddress.toLowerCase();
+
+  // Ensure address starts with 0x
+  if (!normalizedAddress.startsWith('0x')) {
+    normalizedAddress = '0x' + normalizedAddress;
+  }
+
+  // Remove the 0x prefix for length checking and padding
+  const hexPart = normalizedAddress.slice(2);
+
+  // Pad to full 32 bytes (64 hex characters) if shorter
+  if (hexPart.length < 64) {
+    const paddedHex = hexPart.padStart(64, '0');
+    normalizedAddress = '0x' + paddedHex;
+  }
+
+  const mappedSymbol = getStarknetTokenSymbol(normalizedAddress);
 
   if (mappedSymbol) {
     // Cache the result
