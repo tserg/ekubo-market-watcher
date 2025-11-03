@@ -134,7 +134,7 @@ async function getTokenSymbol(tokenAddress: string, network: string = "mainnet")
     const contract = new Contract(tokenAbi, tokenAddress, provider);
 
     // Try to call the symbol function directly (common in ERC20 tokens)
-    const symbolResponse = await contract.symbol({ blockIdentifier: 'latest', parseResponse: true });
+    const symbolResponse = await contract.symbol({ blockIdentifier: 'latest' });
 
     // Helper function to decode felt to string
     const decodeFeltToString = (felt: bigint): string => {
@@ -154,21 +154,31 @@ async function getTokenSymbol(tokenAddress: string, network: string = "mainnet")
     if (symbolResponse && typeof symbolResponse === 'object' && 'data' in symbolResponse) {
       // Handle Cairo 0 array response style (long string format)
       try {
-        if (symbolResponse.data && Array.isArray(symbolResponse.data) && symbolResponse.data.length > 0) {
-          // Convert each felt in the data array to string
-          const longString = symbolResponse.data
-            .filter((felt: bigint) => felt !== 0n) // Remove empty felts
-            .map((felt: bigint) => decodeFeltToString(felt))
-            .join('');
-          symbol = longString;
+        // First check if data array has meaningful content after filtering zeros
+        if (symbolResponse.data && Array.isArray(symbolResponse.data)) {
+          const filteredData = symbolResponse.data.filter((felt: bigint) => felt !== 0n);
+          if (filteredData.length > 0) {
+            // Convert each felt in the data array to string
+            const longString = filteredData
+              .map((felt: bigint) => decodeFeltToString(felt))
+              .join('');
+            symbol = longString;
+          } else if (symbolResponse.pending_word && symbolResponse.pending_word_len > 0) {
+            // Handle pending word when data array is empty
+            symbol = decodeFeltToString(symbolResponse.pending_word);
+          } else {
+            symbol = 'UNKNOWN';
+          }
         } else if (symbolResponse.pending_word && symbolResponse.pending_word_len > 0) {
-          // Handle pending word
+          // Handle pending word when no data array
           symbol = decodeFeltToString(symbolResponse.pending_word);
         } else {
           symbol = 'UNKNOWN';
         }
       } catch (error) {
-        console.debug(`Failed to decode long string:`, error);
+        if (config.logging.level === "debug") {
+          console.debug(`Failed to decode long string:`, error);
+        }
         symbol = 'UNKNOWN';
       }
     } else if (typeof symbolResponse === 'bigint') {
