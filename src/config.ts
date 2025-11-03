@@ -68,7 +68,7 @@ export const config: Config = {
   },
   network: {
     blockChunkSize: parseInt(process.env.BLOCK_CHUNK_SIZE || "10000"), // Blocks to search in each iteration
-    maxLookbackMinutes: parseInt(process.env.MAX_LOOKBACK_MINUTES || "1440"), // 24 hours
+    maxLookbackMinutes: parseInt(process.env.MAX_LOOKBACK_MINUTES || "10080"), // 7 days
   },
   logging: {
     level: (process.env.LOG_LEVEL as "debug" | "info" | "warn" | "error") || "info",
