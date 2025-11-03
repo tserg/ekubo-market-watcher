@@ -3,8 +3,10 @@ import {
   createAgentApp,
   AgentKitConfig,
 } from "@lucid-dreams/agent-kit";
-import { Account, Contract, RpcProvider } from "starknet";
+import { Account, Contract, RpcProvider, shortString, num } from "starknet";
 import { config, validateConfig, logConfig } from "./config";
+import { ERC20_ABI } from "./erc20-abi";
+import { STARKNET_TOKENS, getTokenSymbol as getStarknetTokenSymbol } from "./starknet-token-addresses";
 import dotenv from "dotenv";
 
 // Load environment variables
@@ -59,6 +61,9 @@ interface PoolInitializedEvent {
   block_number: number;
   transaction_hash: string;
   timestamp: number;
+  description?: string;
+  token0_symbol?: string;
+  token1_symbol?: string;
 }
 
 // Cache for storing recent pools
@@ -66,6 +71,8 @@ const poolCache = new Map<string, PoolInitializedEvent>();
 const lastCacheUpdate = new Map<string, number>();
 // Cache for storing block timestamps to avoid repeated RPC calls
 const blockTimestampCache = new Map<number, number>();
+// Cache for storing token symbols to avoid repeated ERC20 calls
+const tokenSymbolCache = new Map<string, string>();
 
 // RPC Provider setup
 function getRpcProvider(network: string = "mainnet"): RpcProvider {
@@ -75,6 +82,118 @@ function getRpcProvider(network: string = "mainnet"): RpcProvider {
 
   return new RpcProvider({ nodeUrl: rpcUrl });
 }
+
+// Fetch token symbol with caching
+async function getTokenSymbol(tokenAddress: string, network: string = "mainnet"): Promise<string> {
+  // Check cache first
+  if (tokenSymbolCache.has(tokenAddress)) {
+    return tokenSymbolCache.get(tokenAddress)!;
+  }
+
+  // First try to get symbol from our comprehensive Starknet token mapping
+  const mappedSymbol = getStarknetTokenSymbol(tokenAddress.toLowerCase());
+
+  if (mappedSymbol) {
+    // Cache the result
+    tokenSymbolCache.set(tokenAddress, mappedSymbol);
+
+    if (config.logging.level === "debug") {
+      console.debug(`Found token symbol in mapping: ${tokenAddress} -> ${mappedSymbol}`);
+    }
+
+    return mappedSymbol;
+  }
+
+  // If not found in mapping, try to fetch from contract dynamically
+  try {
+    const provider = getRpcProvider(network);
+
+    // Fetch the ABI dynamically from the contract
+    const { abi: tokenAbi } = await provider.getClassAt(tokenAddress);
+    if (tokenAbi === undefined) {
+      throw new Error('no ABI found for token contract');
+    }
+
+    const contract = new Contract(tokenAbi, tokenAddress, provider);
+
+    // Try to call the symbol function directly (common in ERC20 tokens)
+    const symbolResponse = await contract.symbol();
+
+    // Helper function to decode felt to string
+    const decodeFeltToString = (felt: bigint): string => {
+      try {
+        // Use shortString.decodeShortString to decode the felt
+        return shortString.decodeShortString(num.toHex(felt));
+      } catch (error) {
+        if (config.logging.level === "debug") {
+          console.debug(`Failed to decode felt ${felt}, using hex fallback:`, error);
+        }
+        return felt.toString();
+      }
+    };
+
+    let symbol: string;
+
+    if (symbolResponse && typeof symbolResponse === 'object' && 'data' in symbolResponse) {
+      // Handle Cairo 0 array response style (long string format)
+      try {
+        if (symbolResponse.data && Array.isArray(symbolResponse.data) && symbolResponse.data.length > 0) {
+          // Convert each felt in the data array to string
+          const longString = symbolResponse.data
+            .filter((felt: bigint) => felt !== 0n) // Remove empty felts
+            .map((felt: bigint) => decodeFeltToString(felt))
+            .join('');
+          symbol = longString;
+        } else if (symbolResponse.pending_word && symbolResponse.pending_word_len > 0) {
+          // Handle pending word
+          symbol = decodeFeltToString(symbolResponse.pending_word);
+        } else {
+          symbol = 'UNKNOWN';
+        }
+      } catch (error) {
+        console.debug(`Failed to decode long string:`, error);
+        symbol = 'UNKNOWN';
+      }
+    } else if (typeof symbolResponse === 'bigint') {
+      // Direct felt response
+      symbol = decodeFeltToString(symbolResponse);
+    } else if (Array.isArray(symbolResponse) && symbolResponse.length > 0) {
+      // Handle array response (might be a long string split into parts)
+      const longString = symbolResponse
+        .filter((item: any) => item !== 0n && item !== undefined) // Remove empty values
+        .map((item: any) => {
+          if (typeof item === 'bigint') {
+            return decodeFeltToString(item);
+          } else if (typeof item === 'string') {
+            return item;
+          } else {
+            return item?.toString() || '';
+          }
+        })
+        .join('');
+      symbol = longString || 'UNKNOWN';
+    } else {
+      // Fallback to string conversion
+      symbol = symbolResponse?.toString() || 'UNKNOWN';
+    }
+
+    // Cache the result
+    tokenSymbolCache.set(tokenAddress, symbol);
+
+    if (config.logging.level === "debug") {
+      console.debug(`Fetched token symbol from contract: ${tokenAddress} -> ${symbol}`);
+    }
+
+    return symbol;
+  } catch (error) {
+    console.warn(`Failed to fetch symbol for token ${tokenAddress}:`, error);
+    // Return address as fallback
+    const fallback = tokenAddress.slice(0, 6) + "..." + tokenAddress.slice(-4);
+    tokenSymbolCache.set(tokenAddress, fallback);
+    return fallback;
+  }
+}
+
 
 // Fetch PoolInitialized events from the blockchain
 async function fetchPoolInitializedEvents(
@@ -134,7 +253,7 @@ async function fetchPoolInitializedEvents(
     }
 
     for (const event of eventLogs.events) {
-      const eventData = extractPoolEventData(event, provider, network, blockTimestamps.get(event.block_number));
+      const eventData = await extractPoolEventData(event, provider, network, blockTimestamps.get(event.block_number));
       if (eventData) {
         pools.push(eventData);
       }
@@ -152,7 +271,7 @@ async function fetchPoolInitializedEvents(
 }
 
 // Extract pool data from PoolInitialized event based on actual Ekubo Core structure
-function extractPoolEventData(event: any, provider: RpcProvider, network: string, blockTimestamp?: number): PoolInitializedEvent | null {
+async function extractPoolEventData(event: any, provider: RpcProvider, network: string, blockTimestamp?: number): Promise<PoolInitializedEvent | null> {
   try {
     const data = event.data || [];
     if (data.length < 7) {
@@ -160,10 +279,22 @@ function extractPoolEventData(event: any, provider: RpcProvider, network: string
       return null;
     }
 
+    const token0Address = data[0] || "0x";
+    const token1Address = data[1] || "0x";
+
+    // Fetch token symbols in parallel
+    const [token0Symbol, token1Symbol] = await Promise.all([
+      getTokenSymbol(token0Address, network),
+      getTokenSymbol(token1Address, network)
+    ]);
+
+    // Create pool description
+    const description = `${token0Symbol}-${token1Symbol}`;
+
     return {
       pool_key: {
-        token0: data[0] || "0x",
-        token1: data[1] || "0x",
+        token0: token0Address,
+        token1: token1Address,
         fee: Number(data[2] || "0"),
         tick_spacing: Number(data[3] || "0"),
         extension: data[4] || "0x",
@@ -172,7 +303,10 @@ function extractPoolEventData(event: any, provider: RpcProvider, network: string
       sqrt_ratio: data[6] || "0",
       block_number: Number(event.block_number || 0),
       transaction_hash: event.transaction_hash || "",
-      timestamp: blockTimestamp || 0
+      timestamp: blockTimestamp || 0,
+      description,
+      token0_symbol: token0Symbol,
+      token1_symbol: token1Symbol
     };
   } catch (error) {
     console.error("Error extracting PoolInitialized event data:", error);
@@ -264,8 +398,9 @@ async function getLatestPools(minutes: number, network: string = "mainnet"): Pro
       const ageHours = (Math.floor(Date.now() / 1000) - pool.timestamp) / 3600;
       const poolDate = pool.timestamp > 0 ? new Date(pool.timestamp * 1000).toISOString() : 'No timestamp';
       console.log(`   ${i+1}. Pool: ${pool.transaction_hash.slice(0, 10)}...`);
-      console.log(`      Token0: ${pool.pool_key.token0.slice(0, 10)}...`);
-      console.log(`      Token1: ${pool.pool_key.token1.slice(0, 10)}...`);
+      console.log(`      Description: ${pool.description || 'Unknown'}`);
+      console.log(`      Token0: ${pool.token0_symbol || pool.pool_key.token0.slice(0, 10)}... (${pool.pool_key.token0.slice(0, 6)}...)`);
+      console.log(`      Token1: ${pool.token1_symbol || pool.pool_key.token1.slice(0, 10)}... (${pool.pool_key.token1.slice(0, 6)}...)`);
       console.log(`      Fee: ${pool.pool_key.fee}`);
       console.log(`      Block: ${pool.block_number}`);
       console.log(`      Timestamp: ${pool.timestamp}`);
@@ -309,9 +444,14 @@ addEntrypoint({
         tick_spacing: z.number(),
         extension: z.string(),
       }),
+      initial_tick: z.number(),
+      sqrt_ratio: z.string(),
       block_number: z.number(),
       transaction_hash: z.string(),
       timestamp: z.number(),
+      description: z.string().optional(),
+      token0_symbol: z.string().optional(),
+      token1_symbol: z.string().optional(),
     })),
     count: z.number(),
     timeframe: z.object({
@@ -336,9 +476,14 @@ addEntrypoint({
             tick_spacing: pool.pool_key.tick_spacing,
             extension: pool.pool_key.extension,
           },
+          initial_tick: pool.initial_tick,
+          sqrt_ratio: pool.sqrt_ratio,
           block_number: pool.block_number,
           transaction_hash: pool.transaction_hash,
-          timestamp: pool.timestamp
+          timestamp: pool.timestamp,
+          description: pool.description,
+          token0_symbol: pool.token0_symbol,
+          token1_symbol: pool.token1_symbol
         })),
         count: pools.length,
         timeframe: {
@@ -406,7 +551,10 @@ addEntrypoint({
             block_number: pool.block_number,
             transaction_hash: pool.transaction_hash,
             timestamp: pool.timestamp
-          }
+          },
+          description: pool.description,
+          token0_symbol: pool.token0_symbol,
+          token1_symbol: pool.token1_symbol
         })),
         count: pools.length,
         timeframe: {
