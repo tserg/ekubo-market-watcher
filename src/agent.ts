@@ -432,7 +432,7 @@ addEntrypoint({
   key: "list-latest-pools",
   description: "Returns a list of new pools created in the given timeframe.",
   input: z.object({
-    minutes: z.string().min(1).max(1440).default("60").describe("Time window in minutes (1-1440)"),
+    minutes: z.string().min(1).max(10080).default("60").describe("Time window in minutes (1-10080)"),
     network: z.enum(["mainnet", "testnet"]).default("mainnet").describe("Starknet network"),
   }),
   output: z.object({
