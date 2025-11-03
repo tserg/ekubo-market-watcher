@@ -126,7 +126,7 @@ async function getTokenSymbol(tokenAddress: string, network: string = "mainnet")
     const provider = getRpcProvider(network);
 
     // Fetch the ABI dynamically from the contract
-    const { abi: tokenAbi } = await provider.getClassAt(tokenAddress);
+    const { abi: tokenAbi } = await provider.getClassAt(tokenAddress, "latest");
     if (tokenAbi === undefined) {
       throw new Error('no ABI found for token contract');
     }
@@ -134,7 +134,7 @@ async function getTokenSymbol(tokenAddress: string, network: string = "mainnet")
     const contract = new Contract(tokenAbi, tokenAddress, provider);
 
     // Try to call the symbol function directly (common in ERC20 tokens)
-    const symbolResponse = await contract.symbol();
+    const symbolResponse = await contract.symbol({ blockIdentifier: 'latest', parseResponse: true });
 
     // Helper function to decode felt to string
     const decodeFeltToString = (felt: bigint): string => {
