@@ -2,7 +2,7 @@ import { z } from "zod";
 import {
   createAgentApp,
   AgentKitConfig,
-} from "@lucid-dreams/agent-kit";
+} from "@lucid-agents/agent-kit";
 import { Account, Contract, RpcProvider, shortString, num } from "starknet";
 import { config, validateConfig, logConfig } from "./config";
 import { ERC20_ABI } from "./erc20-abi";
