@@ -486,7 +486,7 @@ addEntrypoint({
       network: z.string(),
     }),
   }),
-  price: "0.02",
+  price: "0.01",
 
   handler: async ({ input }) => {
     console.log(`🎯 [list-latest-pools] Called with input:`, input);
@@ -554,7 +554,7 @@ addEntrypoint({
       network: z.string(),
     }),
   }),
-  price: "0.03",
+  price: "0.01",
 
   handler: async ({ input }) => {
     console.log(`🎯 [list-pools-by-hours] Called with input:`, input);
